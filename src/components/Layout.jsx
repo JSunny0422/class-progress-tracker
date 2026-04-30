@@ -6,7 +6,7 @@ const navItems = [
   { id: 'settings', label: '설정', icon: '⚙️' },
 ];
 
-export default function Layout({ children, page, navigate }) {
+export default function Layout({ children, page, navigate, user, onLogout }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
@@ -30,6 +30,20 @@ export default function Layout({ children, page, navigate }) {
             </button>
           ))}
         </nav>
+        <div className="p-3 border-t border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            {user?.photoURL && (
+              <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
+            )}
+            <span className="text-xs text-gray-600 truncate">{user?.displayName}</span>
+          </div>
+          <button
+            onClick={onLogout}
+            className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+          >
+            로그아웃
+          </button>
+        </div>
       </aside>
       <main className="flex-1 p-6 overflow-auto max-h-screen">
         {children}

@@ -1,73 +1,70 @@
 import { useState, useEffect } from 'react';
+import { db } from './firebase';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
 
-const DEFAULT = {
-  classes: [],
-  students: [],
-  subjects: [],
-  lessons: [],
-  notes: [],
-};
+export function useStore(userId) {
+  const [classes, setClasses] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [lessons, setLessons] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-export function useStore() {
-  const [data, setData] = useState(() => {
-    try {
-      const stored = localStorage.getItem('classTracker');
-      return stored ? { ...DEFAULT, ...JSON.parse(stored) } : DEFAULT;
-    } catch {
-      return DEFAULT;
-    }
-  });
+  const col = (name) => collection(db, 'users', userId, name);
+  const docRef = (name, id) => doc(db, 'users', userId, name, id);
 
   useEffect(() => {
-    localStorage.setItem('classTracker', JSON.stringify(data));
-  }, [data]);
+    if (!userId) return;
+    let loaded = 0;
+    const onLoad = () => { loaded++; if (loaded === 5) setLoading(false); };
 
-  function update(key, fn) {
-    setData(d => ({ ...d, [key]: fn(d[key]) }));
-  }
+    const unsubs = [
+      onSnapshot(col('classes'),  snap => { setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() }))); onLoad(); }),
+      onSnapshot(col('students'), snap => { setStudents(snap.docs.map(d => ({ id: d.id, ...d.data() }))); onLoad(); }),
+      onSnapshot(col('subjects'), snap => { setSubjects(snap.docs.map(d => ({ id: d.id, ...d.data() }))); onLoad(); }),
+      onSnapshot(col('lessons'),  snap => { setLessons(snap.docs.map(d => ({ id: d.id, ...d.data() }))); onLoad(); }),
+      onSnapshot(col('notes'),    snap => { setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))); onLoad(); }),
+    ];
+
+    return () => unsubs.forEach(u => u());
+  }, [userId]);
 
   return {
-    ...data,
-    addClass: (name) => update('classes', list => [...list, { id: `${Date.now()}`, name }]),
-    removeClass: (id) => setData(d => ({
-      ...d,
-      classes: d.classes.filter(c => c.id !== id),
-      students: d.students.filter(s => s.classId !== id),
-    })),
-    addStudent: (name, classId) => update('students', list => [...list, { id: `${Date.now()}`, name, classId }]),
-    addStudents: (names, classId) => update('students', list => [
-      ...list,
-      ...names.map((name, i) => ({ id: `${Date.now()}_${i}`, name, classId })),
-    ]),
-    removeStudent: (id) => setData(d => ({
-      ...d,
-      students: d.students.filter(s => s.id !== id),
-      notes: d.notes.filter(n => n.studentId !== id),
-    })),
-    addSubject: (name) => update('subjects', list => [...list, { id: `${Date.now()}`, name }]),
-    removeSubject: (id) => setData(d => ({
-      ...d,
-      subjects: d.subjects.filter(s => s.id !== id),
-    })),
-    addLesson: (lesson) => {
-      const id = `${Date.now()}`;
-      setData(d => ({ ...d, lessons: [...d.lessons, { id, ...lesson }] }));
-      return id;
+    classes, students, subjects, lessons, notes, loading,
+
+    addClass: (name) => addDoc(col('classes'), { name }),
+    removeClass: async (id) => {
+      await deleteDoc(docRef('classes', id));
+      students.filter(s => s.classId === id).forEach(s => deleteDoc(docRef('students', s.id)));
     },
-    saveNote: (lessonId, studentId, note) => {
-      setData(d => {
-        const existing = d.notes.find(n => n.lessonId === lessonId && n.studentId === studentId);
-        if (existing) {
-          return { ...d, notes: d.notes.map(n => n.id === existing.id ? { ...n, note } : n) };
-        }
-        return { ...d, notes: [...d.notes, { id: `${Date.now()}_${studentId}`, lessonId, studentId, note }] };
-      });
+
+    addStudent: (name, classId) => addDoc(col('students'), { name, classId }),
+    addStudents: (names, classId) => Promise.all(names.map(name => addDoc(col('students'), { name, classId }))),
+    removeStudent: async (id) => {
+      await deleteDoc(docRef('students', id));
+      notes.filter(n => n.studentId === id).forEach(n => deleteDoc(docRef('notes', n.id)));
     },
-    removeNote: (id) => update('notes', list => list.filter(n => n.id !== id)),
-    removeLesson: (id) => setData(d => ({
-      ...d,
-      lessons: d.lessons.filter(l => l.id !== id),
-      notes: d.notes.filter(n => n.lessonId !== id),
-    })),
+
+    addSubject: (name) => addDoc(col('subjects'), { name }),
+    removeSubject: (id) => deleteDoc(docRef('subjects', id)),
+
+    addLesson: async (lesson) => {
+      const ref = await addDoc(col('lessons'), lesson);
+      return ref.id;
+    },
+    removeLesson: async (id) => {
+      await deleteDoc(docRef('lessons', id));
+      notes.filter(n => n.lessonId === id).forEach(n => deleteDoc(docRef('notes', n.id)));
+    },
+
+    saveNote: async (lessonId, studentId, note) => {
+      const existing = notes.find(n => n.lessonId === lessonId && n.studentId === studentId);
+      if (existing) {
+        await setDoc(docRef('notes', existing.id), { lessonId, studentId, note });
+      } else {
+        await addDoc(col('notes'), { lessonId, studentId, note });
+      }
+    },
+    removeNote: (id) => deleteDoc(docRef('notes', id)),
   };
 }
