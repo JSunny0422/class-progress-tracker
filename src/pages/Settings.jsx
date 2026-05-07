@@ -95,6 +95,188 @@ function ExcelImport({ classId, onImport }) {
   );
 }
 
+// 학번에서 학년/반 번호 추출
+// 4자리: 2101 → grade=2, classNum=1
+// 5자리: 20101 → grade=20(2학년), classNum=1 (또는 grade=2, classNum=0 — 여기선 일반적 4자리 기준)
+function parseStudentId(idStr) {
+  const id = String(idStr).replace(/\s/g, '');
+  if (id.length === 4 && /^\d{4}$/.test(id)) {
+    return { grade: parseInt(id[0]), classNum: parseInt(id[1]) };
+  }
+  if (id.length === 5 && /^\d{5}$/.test(id)) {
+    return { grade: parseInt(id.slice(0, 2)), classNum: parseInt(id[2]) };
+  }
+  return null;
+}
+
+function findMatchingClass(grade, classNum, classes) {
+  return classes.find(c => {
+    const nums = c.name.match(/\d+/g)?.map(Number) || [];
+    return nums.includes(grade) && nums.includes(classNum);
+  }) || null;
+}
+
+function GradeImport({ store }) {
+  const fileRef = useRef();
+  const [groups, setGroups] = useState(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: 'binary' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      // 헤더 행 탐지
+      const firstRow = rows[0]?.map(c => String(c ?? '').trim()) ?? [];
+      const idColIdx = firstRow.findIndex(c => c.includes('학번') || c.includes('번호'));
+      const nameColIdx = firstRow.findIndex(c => c.includes('이름') || c.includes('성명'));
+      const hasHeader = idColIdx >= 0 || nameColIdx >= 0;
+      const idCol = idColIdx >= 0 ? idColIdx : 0;
+      const nameCol = nameColIdx >= 0 ? nameColIdx : 1;
+      const dataRows = hasHeader ? rows.slice(1) : rows;
+
+      // 학생 파싱
+      const students = dataRows
+        .map(row => ({
+          studentId: String(row[idCol] ?? '').trim(),
+          name: String(row[nameCol] ?? '').trim(),
+        }))
+        .filter(s => s.name && parseStudentId(s.studentId));
+
+      if (students.length === 0) {
+        alert('학번/이름 데이터를 찾을 수 없습니다.\n파일 형식: 학번 열과 이름 열이 있어야 합니다.');
+        e.target.value = '';
+        return;
+      }
+
+      // 반별 그룹화
+      const groupMap = {};
+      students.forEach(s => {
+        const parsed = parseStudentId(s.studentId);
+        const key = `${parsed.grade}-${parsed.classNum}`;
+        if (!groupMap[key]) {
+          const matched = findMatchingClass(parsed.grade, parsed.classNum, store.classes);
+          groupMap[key] = {
+            grade: parsed.grade,
+            classNum: parsed.classNum,
+            classId: matched?.id ?? '',
+            students: [],
+          };
+        }
+        groupMap[key].students.push(s);
+      });
+
+      const sorted = Object.values(groupMap).sort((a, b) =>
+        a.grade !== b.grade ? a.grade - b.grade : a.classNum - b.classNum
+      );
+      setGroups(sorted);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const updateClassId = (idx, classId) => {
+    setGroups(prev => prev.map((g, i) => i === idx ? { ...g, classId } : g));
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    for (const group of groups) {
+      if (!group.classId) continue;
+      await store.addStudents(group.students.map(s => s.name), group.classId);
+    }
+    setImporting(false);
+    setGroups(null);
+  };
+
+  const matchedCount = groups?.filter(g => g.classId).length ?? 0;
+  const totalGroups = groups?.length ?? 0;
+
+  return (
+    <div className="mb-6 pb-6 border-b border-gray-200">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-semibold text-gray-700">학년 전체 파일로 가져오기</p>
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        학번과 이름이 있는 엑셀 파일을 업로드하면 학번 앞자리 기준으로 반을 자동 분류합니다
+        <span className="ml-1 text-gray-400">(예: 2101 → 2학년 1반)</span>
+      </p>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+      <button
+        onClick={() => fileRef.current.click()}
+        className="text-sm border border-dashed border-indigo-300 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50"
+      >
+        학년 전체 엑셀 파일 선택
+      </button>
+
+      {groups && (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs text-gray-500">
+            총 {groups.reduce((s, g) => s + g.students.length, 0)}명 감지 —
+            {matchedCount}/{totalGroups}개 반 자동 연결됨
+            {matchedCount < totalGroups && <span className="text-yellow-600 ml-1">⚠ 미연결 반은 가져오기에서 제외</span>}
+          </p>
+
+          {groups.map((group, idx) => (
+            <div
+              key={idx}
+              className={`border rounded-xl p-3 ${group.classId ? 'border-gray-200 bg-white' : 'border-yellow-300 bg-yellow-50'}`}
+            >
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-sm font-semibold text-gray-700">
+                  {group.grade}학년 {group.classNum}반
+                  <span className="font-normal text-gray-400 ml-1">({group.students.length}명)</span>
+                </span>
+                <span className="text-xs text-gray-400">→ DB 반 연결:</span>
+                <select
+                  value={group.classId}
+                  onChange={e => updateClassId(idx, e.target.value)}
+                  className={`text-xs border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                    group.classId ? 'border-gray-200' : 'border-yellow-400 bg-yellow-50'
+                  }`}
+                >
+                  <option value="">반 선택</option>
+                  {store.classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                {group.classId && <span className="text-xs text-green-600 font-medium">✓ 연결됨</span>}
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                {group.students.map((s, i) => (
+                  <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                    {s.studentId} {s.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleImport}
+              disabled={importing || matchedCount === 0}
+              className="text-sm bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {importing ? '가져오는 중...' : `${matchedCount}개 반 가져오기`}
+            </button>
+            <button
+              onClick={() => setGroups(null)}
+              className="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings({ store }) {
   const [tab, setTab] = useState('classes');
   const [selectedClass, setSelectedClass] = useState('');
@@ -135,28 +317,34 @@ export default function Settings({ store }) {
         {tab === 'students' && (
           <>
             <h3 className="font-semibold text-gray-700 mb-4">학생 관리</h3>
-            <div className="mb-4">
-              <label className="text-sm text-gray-600 font-medium">반 선택</label>
-              <select
-                value={selectedClass}
-                onChange={e => setSelectedClass(e.target.value)}
-                className="mt-1 block w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              >
-                <option value="">반을 선택하세요</option>
-                {store.classes.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+
+            <GradeImport store={store} />
+
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-3">반별 개별 관리</p>
+              <div className="mb-4">
+                <label className="text-sm text-gray-600 font-medium">반 선택</label>
+                <select
+                  value={selectedClass}
+                  onChange={e => setSelectedClass(e.target.value)}
+                  className="mt-1 block w-48 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="">반을 선택하세요</option>
+                  {store.classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              {selectedClass ? (
+                <>
+                  <TagList items={studentsInClass} onRemove={store.removeStudent} />
+                  <AddForm placeholder="학생 이름 (개별 추가)" onAdd={(name) => store.addStudent(name, selectedClass)} />
+                  <ExcelImport classId={selectedClass} onImport={(names) => store.addStudents(names, selectedClass)} />
+                </>
+              ) : (
+                <p className="text-gray-400 text-sm">반을 먼저 선택해 주세요</p>
+              )}
             </div>
-            {selectedClass ? (
-              <>
-                <TagList items={studentsInClass} onRemove={store.removeStudent} />
-                <AddForm placeholder="학생 이름 (개별 추가)" onAdd={(name) => store.addStudent(name, selectedClass)} />
-                <ExcelImport classId={selectedClass} onImport={(names) => store.addStudents(names, selectedClass)} />
-              </>
-            ) : (
-              <p className="text-gray-400 text-sm">반을 먼저 선택해 주세요</p>
-            )}
           </>
         )}
 
