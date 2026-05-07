@@ -33,8 +33,16 @@ export function useStore(userId) {
     a.name.localeCompare(b.name, 'ko', { numeric: true })
   );
 
+  const sortedStudents = [...students].sort((a, b) => {
+    if (a.studentId && b.studentId)
+      return a.studentId.localeCompare(b.studentId, undefined, { numeric: true });
+    if (a.studentId) return -1;
+    if (b.studentId) return 1;
+    return a.name.localeCompare(b.name, 'ko');
+  });
+
   return {
-    classes: sortedClasses, students, subjects, lessons, notes, loading,
+    classes: sortedClasses, students: sortedStudents, subjects, lessons, notes, loading,
 
     addClass: (name) => addDoc(col('classes'), { name }),
     removeClass: async (id) => {
