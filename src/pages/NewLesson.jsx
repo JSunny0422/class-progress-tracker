@@ -121,7 +121,9 @@ export default function NewLesson({ store, navigate }) {
         <div className="space-y-3">
           {studentsInClass.map(student => (
             <div key={student.id} className="bg-white rounded-xl border border-gray-200 p-4">
-              <label className="text-sm font-semibold text-gray-700">{student.name}</label>
+              <label className="text-sm font-semibold text-gray-700">
+                {student.studentId ? `${student.studentId} ${student.name}` : student.name}
+              </label>
               <textarea
                 rows={2}
                 value={notes[student.id] || ''}

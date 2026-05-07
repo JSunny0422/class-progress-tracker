@@ -22,13 +22,13 @@ function AddForm({ placeholder, onAdd }) {
   );
 }
 
-function TagList({ items, onRemove }) {
+function TagList({ items, onRemove, getLabel }) {
   if (items.length === 0) return <p className="text-gray-400 text-sm">등록된 항목이 없습니다</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {items.map(item => (
         <span key={item.id} className="flex items-center gap-1 bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
-          {item.name}
+          {getLabel ? getLabel(item) : item.name}
           <button onClick={() => onRemove(item.id)} className="text-gray-400 hover:text-red-500 ml-1 leading-none">×</button>
         </span>
       ))}
@@ -188,7 +188,7 @@ function GradeImport({ store }) {
         const ref = await store.addClass(group.finalName);
         classId = ref.id;
       }
-      await store.addStudents(group.students.map(s => s.name), classId);
+      await store.addStudents(group.students.map(s => ({ name: s.name, studentId: s.studentId })), classId);
     }
     setImporting(false);
     setGroups(null);
@@ -327,7 +327,11 @@ export default function Settings({ store }) {
             </div>
             {selectedClass ? (
               <>
-                <TagList items={studentsInClass} onRemove={store.removeStudent} />
+                <TagList
+                  items={studentsInClass}
+                  onRemove={store.removeStudent}
+                  getLabel={s => s.studentId ? `${s.studentId} ${s.name}` : s.name}
+                />
                 <AddForm placeholder="학생 이름 (개별 추가)" onAdd={(name) => store.addStudent(name, selectedClass)} />
                 <ExcelImport classId={selectedClass} onImport={(names) => store.addStudents(names, selectedClass)} />
               </>

@@ -101,7 +101,7 @@ export default function SpecialNotes({ store }) {
               <option value="">학생 선택</option>
               {studentsInClass.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({store.notes.filter(n => n.studentId === s.id).length}건)
+                  {s.studentId ? `${s.studentId} ${s.name}` : s.name} ({store.notes.filter(n => n.studentId === s.id).length}건)
                 </option>
               ))}
             </select>
@@ -119,7 +119,7 @@ export default function SpecialNotes({ store }) {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="font-semibold text-gray-700">
-              {student?.name} — 특기사항 {studentNotes.length}건
+              {student ? (student.studentId ? `${student.studentId} ${student.name}` : student.name) : ''} — 특기사항 {studentNotes.length}건
             </h3>
             {studentNotes.length > 0 && (
               <div className="flex gap-2">

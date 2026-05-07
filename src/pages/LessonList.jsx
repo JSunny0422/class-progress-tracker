@@ -116,7 +116,9 @@ function StudentNotesEditor({ lesson, store, onClose }) {
       <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
         {studentsInClass.map(student => (
           <div key={student.id} className="flex gap-2 items-start">
-            <span className="text-xs font-semibold text-gray-600 w-16 shrink-0 pt-2">{student.name}</span>
+            <span className="text-xs font-semibold text-gray-600 w-24 shrink-0 pt-2">
+              {student.studentId ? `${student.studentId} ${student.name}` : student.name}
+            </span>
             <textarea
               rows={2}
               value={notes[student.id] || ''}
@@ -232,7 +234,9 @@ export default function LessonList({ store }) {
                                 const student = store.students.find(s => s.id === note.studentId);
                                 return (
                                   <div key={note.id} className="flex gap-2 bg-yellow-50 rounded-lg p-2.5">
-                                    <span className="text-xs font-semibold text-gray-600 w-16 shrink-0">{student?.name || '-'}</span>
+                                    <span className="text-xs font-semibold text-gray-600 w-24 shrink-0">
+                                      {student ? (student.studentId ? `${student.studentId} ${student.name}` : student.name) : '-'}
+                                    </span>
                                     <span className="text-xs text-gray-700 flex-1">{note.note}</span>
                                     <button onClick={() => store.removeNote(note.id)} className="text-gray-300 hover:text-red-400 text-xs shrink-0">×</button>
                                   </div>
