@@ -29,8 +29,12 @@ export function useStore(userId) {
     return () => unsubs.forEach(u => u());
   }, [userId]);
 
+  const sortedClasses = [...classes].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ko', { numeric: true })
+  );
+
   return {
-    classes, students, subjects, lessons, notes, loading,
+    classes: sortedClasses, students, subjects, lessons, notes, loading,
 
     addClass: (name) => addDoc(col('classes'), { name }),
     removeClass: async (id) => {
