@@ -1,9 +1,88 @@
 import { useState } from 'react';
 
+function EditForm({ lesson, store, onClose }) {
+  const [form, setForm] = useState({
+    date: lesson.date,
+    subjectId: lesson.subjectId,
+    classId: lesson.classId,
+    unit: lesson.unit,
+    content: lesson.content,
+  });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await store.updateLesson(lesson.id, form);
+    onClose();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 pt-3 border-t border-gray-100">
+      <p className="text-xs font-medium text-blue-600">수업 수정</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-500">날짜</label>
+          <input
+            type="date"
+            value={form.date}
+            onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">과목</label>
+          <select
+            value={form.subjectId}
+            onChange={e => setForm(f => ({ ...f, subjectId: e.target.value }))}
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          >
+            {store.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">반</label>
+          <select
+            value={form.classId}
+            onChange={e => setForm(f => ({ ...f, classId: e.target.value }))}
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          >
+            {store.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">단원</label>
+          <input
+            value={form.unit}
+            onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
+            className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-gray-500">수업 내용</label>
+        <textarea
+          rows={4}
+          value={form.content}
+          onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+          className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+        />
+      </div>
+      <div className="flex gap-2">
+        <button type="submit" className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700">
+          저장
+        </button>
+        <button type="button" onClick={onClose} className="text-xs text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100">
+          취소
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function LessonList({ store }) {
   const [filterSubject, setFilterSubject] = useState('');
   const [filterClass, setFilterClass] = useState('');
   const [expanded, setExpanded] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const filtered = [...store.lessons]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -46,11 +125,12 @@ export default function LessonList({ store }) {
             const cls = store.classes.find(c => c.id === lesson.classId);
             const lessonNotes = store.notes.filter(n => n.lessonId === lesson.id);
             const isExpanded = expanded === lesson.id;
+            const isEditing = editing === lesson.id;
 
             return (
               <div key={lesson.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <button
-                  onClick={() => setExpanded(isExpanded ? null : lesson.id)}
+                  onClick={() => { setExpanded(isExpanded ? null : lesson.id); setEditing(null); }}
                   className="w-full text-left p-4 hover:bg-gray-50 flex items-center gap-3"
                 >
                   <span className="text-sm text-gray-400 w-24 shrink-0">{lesson.date}</span>
@@ -67,33 +147,47 @@ export default function LessonList({ store }) {
 
                 {isExpanded && (
                   <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 mb-1">수업 내용</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{lesson.content}</p>
-                    </div>
-                    {lessonNotes.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-2">학생 특기사항</p>
-                        <div className="space-y-1.5">
-                          {lessonNotes.map(note => {
-                            const student = store.students.find(s => s.id === note.studentId);
-                            return (
-                              <div key={note.id} className="flex gap-2 bg-yellow-50 rounded-lg p-2.5">
-                                <span className="text-xs font-semibold text-gray-600 w-16 shrink-0">{student?.name || '-'}</span>
-                                <span className="text-xs text-gray-700 flex-1">{note.note}</span>
-                                <button onClick={() => store.removeNote(note.id)} className="text-gray-300 hover:text-red-400 text-xs shrink-0">×</button>
-                              </div>
-                            );
-                          })}
+                    {isEditing ? (
+                      <EditForm lesson={lesson} store={store} onClose={() => setEditing(null)} />
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 mb-1">수업 내용</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{lesson.content}</p>
                         </div>
-                      </div>
+                        {lessonNotes.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 mb-2">학생 특기사항</p>
+                            <div className="space-y-1.5">
+                              {lessonNotes.map(note => {
+                                const student = store.students.find(s => s.id === note.studentId);
+                                return (
+                                  <div key={note.id} className="flex gap-2 bg-yellow-50 rounded-lg p-2.5">
+                                    <span className="text-xs font-semibold text-gray-600 w-16 shrink-0">{student?.name || '-'}</span>
+                                    <span className="text-xs text-gray-700 flex-1">{note.note}</span>
+                                    <button onClick={() => store.removeNote(note.id)} className="text-gray-300 hover:text-red-400 text-xs shrink-0">×</button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setEditing(lesson.id)}
+                            className="text-xs text-blue-500 hover:text-blue-700"
+                          >
+                            수업 수정
+                          </button>
+                          <button
+                            onClick={() => store.removeLesson(lesson.id)}
+                            className="text-xs text-red-400 hover:text-red-600"
+                          >
+                            수업 삭제
+                          </button>
+                        </div>
+                      </>
                     )}
-                    <button
-                      onClick={() => store.removeLesson(lesson.id)}
-                      className="text-xs text-red-400 hover:text-red-600 mt-1"
-                    >
-                      수업 삭제
-                    </button>
                   </div>
                 )}
               </div>

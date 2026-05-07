@@ -52,6 +52,7 @@ export function useStore(userId) {
       const ref = await addDoc(col('lessons'), lesson);
       return ref.id;
     },
+    updateLesson: (id, lesson) => setDoc(docRef('lessons', id), lesson),
     removeLesson: async (id) => {
       await deleteDoc(docRef('lessons', id));
       notes.filter(n => n.lessonId === id).forEach(n => deleteDoc(docRef('notes', n.id)));
