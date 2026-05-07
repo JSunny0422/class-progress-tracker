@@ -43,7 +43,11 @@ export function useStore(userId) {
     },
 
     addStudent: (name, classId) => addDoc(col('students'), { name, classId }),
-    addStudents: (names, classId) => Promise.all(names.map(name => addDoc(col('students'), { name, classId }))),
+    addStudents: (names, classId) => Promise.all(
+      names
+        .filter(name => !students.some(s => s.classId === classId && s.name === name))
+        .map(name => addDoc(col('students'), { name, classId }))
+    ),
     removeStudent: async (id) => {
       await deleteDoc(docRef('students', id));
       notes.filter(n => n.studentId === id).forEach(n => deleteDoc(docRef('notes', n.id)));
