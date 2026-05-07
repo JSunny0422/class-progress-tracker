@@ -78,11 +78,73 @@ function EditForm({ lesson, store, onClose }) {
   );
 }
 
+function StudentNotesEditor({ lesson, store, onClose }) {
+  const studentsInClass = store.students.filter(s => s.classId === lesson.classId);
+  const existingNotes = store.notes.filter(n => n.lessonId === lesson.id);
+
+  const [notes, setNotes] = useState(() => {
+    const init = {};
+    existingNotes.forEach(n => { init[n.studentId] = n.note; });
+    return init;
+  });
+
+  const handleSave = async () => {
+    for (const student of studentsInClass) {
+      const note = (notes[student.id] || '').trim();
+      const existing = existingNotes.find(n => n.studentId === student.id);
+      if (note) {
+        await store.saveNote(lesson.id, student.id, note);
+      } else if (existing) {
+        await store.removeNote(existing.id);
+      }
+    }
+    onClose();
+  };
+
+  if (studentsInClass.length === 0) {
+    return (
+      <div className="pt-3 border-t border-gray-100">
+        <p className="text-xs text-gray-400">이 반에 등록된 학생이 없습니다. 설정에서 학생을 먼저 등록해 주세요.</p>
+        <button onClick={onClose} className="mt-2 text-xs text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100">닫기</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-3 border-t border-gray-100 space-y-3">
+      <p className="text-xs font-medium text-blue-600">학생 특기사항 편집</p>
+      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+        {studentsInClass.map(student => (
+          <div key={student.id} className="flex gap-2 items-start">
+            <span className="text-xs font-semibold text-gray-600 w-16 shrink-0 pt-2">{student.name}</span>
+            <textarea
+              rows={2}
+              value={notes[student.id] || ''}
+              onChange={e => setNotes(n => ({ ...n, [student.id]: e.target.value }))}
+              placeholder="특기사항 없으면 비워두세요"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleSave} className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700">
+          저장
+        </button>
+        <button onClick={onClose} className="text-xs text-gray-500 px-4 py-1.5 rounded-lg hover:bg-gray-100">
+          취소
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function LessonList({ store }) {
   const [filterSubject, setFilterSubject] = useState('');
   const [filterClass, setFilterClass] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [editingNotes, setEditingNotes] = useState(null);
 
   const filtered = [...store.lessons]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -126,11 +188,16 @@ export default function LessonList({ store }) {
             const lessonNotes = store.notes.filter(n => n.lessonId === lesson.id);
             const isExpanded = expanded === lesson.id;
             const isEditing = editing === lesson.id;
+            const isEditingNotes = editingNotes === lesson.id;
 
             return (
               <div key={lesson.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <button
-                  onClick={() => { setExpanded(isExpanded ? null : lesson.id); setEditing(null); }}
+                  onClick={() => {
+                    setExpanded(isExpanded ? null : lesson.id);
+                    setEditing(null);
+                    setEditingNotes(null);
+                  }}
                   className="w-full text-left p-4 hover:bg-gray-50 flex items-center gap-3"
                 >
                   <span className="text-sm text-gray-400 w-24 shrink-0">{lesson.date}</span>
@@ -149,6 +216,8 @@ export default function LessonList({ store }) {
                   <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
                     {isEditing ? (
                       <EditForm lesson={lesson} store={store} onClose={() => setEditing(null)} />
+                    ) : isEditingNotes ? (
+                      <StudentNotesEditor lesson={lesson} store={store} onClose={() => setEditingNotes(null)} />
                     ) : (
                       <>
                         <div>
@@ -178,6 +247,12 @@ export default function LessonList({ store }) {
                             className="text-xs text-blue-500 hover:text-blue-700"
                           >
                             수업 수정
+                          </button>
+                          <button
+                            onClick={() => setEditingNotes(lesson.id)}
+                            className="text-xs text-yellow-600 hover:text-yellow-800"
+                          >
+                            특기사항 편집
                           </button>
                           <button
                             onClick={() => store.removeLesson(lesson.id)}
